@@ -1,18 +1,41 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { BackHandler } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { InventoryProvider, useInventory } from '@/features/inventory/InventoryProvider';
+import { colors } from '@/theme/tokens';
 
-SplashScreen.preventAutoHideAsync();
+export const unstable_settings = { initialRouteName: 'index' };
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+function InventoryStack() {
+  const { isSaving } = useInventory();
+  useEffect(() => {
+    if (!isSaving) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => subscription.remove();
+  }, [isSaving]);
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <>
+      <StatusBar style="dark" />
+      <Stack screenOptions={{
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.ink,
+        headerShadowVisible: false,
+        headerBackButtonDisplayMode: 'minimal',
+        headerBackVisible: !isSaving,
+        gestureEnabled: !isSaving,
+        contentStyle: { backgroundColor: colors.background },
+      }}>
+        <Stack.Screen name="index" options={{ headerShown: false, title: 'Inventory' }} />
+        <Stack.Screen name="stocks/new" options={{ title: 'Add stock' }} />
+        <Stack.Screen name="stocks/[id]" options={{ title: 'Stock details' }} />
+      </Stack>
+    </>
   );
+}
+
+export default function RootLayout() {
+  return <InventoryProvider><InventoryStack /></InventoryProvider>;
 }
