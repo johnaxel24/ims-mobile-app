@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii } from '@/theme/tokens';
+import { colors, radii } from '@/theme/inventoryTheme';
 
 export function Notice({ message, onDismiss, error = false }: { message: string; onDismiss?: () => void; error?: boolean }) {
   return (

@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from './Button';
-import { colors, contentWidth, radii } from '@/theme/tokens';
+import { colors, contentWidth, radii } from '@/theme/inventoryTheme';
 
 export function Sheet({ title, visible, onClose, children }: { title: string; visible: boolean; onClose: () => void; children: ReactNode }) {
   return (

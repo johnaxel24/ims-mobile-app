@@ -3,8 +3,8 @@ import { Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FieldLabel } from '@/components/FieldLabel';
 import { TextField } from '@/components/TextField';
-import { colors, radii, shadows, spacing } from '@/theme/tokens';
-import { parseWholeNumber, QUANTITY_CHANGE_REASONS } from '../inventory.logic';
+import { colors, radii, shadows, spacing } from '@/theme/inventoryTheme';
+import { EDIT_QUANTITY_CHANGE_REASONS, parseWholeNumber } from '../inventory.logic';
 import type { QuantityChangeReason } from '../inventory.types';
 
 interface QuantityAdjustmentProps {
@@ -38,7 +38,7 @@ export function QuantityAdjustment({
         </Text>
       )}
       <TextField
-        label={editing ? 'New quantity' : 'Quantity'}
+        label={editing ? 'Available quantity' : 'Initial quantity'}
         required
         value={value}
         onChangeText={onQuantityChange}
@@ -46,7 +46,6 @@ export function QuantityAdjustment({
         keyboardType="number-pad"
         error={error}
         editable={!disabled}
-        hint={editing ? 'Enter the total units available after this change.' : 'Number of individual units available.'}
       />
       {changed && currentQuantity !== undefined && quantity !== null && (
         <>
@@ -76,7 +75,7 @@ export function QuantityAdjustment({
             {reasonError && <Text accessibilityRole="alert" style={styles.error}>{reasonError}</Text>}
             {reasonOpen && (
               <View style={styles.options}>
-                {QUANTITY_CHANGE_REASONS.map((option) => (
+                {EDIT_QUANTITY_CHANGE_REASONS.map((option) => (
                   <Pressable
                     key={option}
                     accessibilityRole="radio"
@@ -100,7 +99,6 @@ export function QuantityAdjustment({
             placeholder="Details about this quantity change…"
             editable={!disabled}
             multiline
-            hint="Saved with this history entry, separately from stock notes."
           />
         </>
       )}

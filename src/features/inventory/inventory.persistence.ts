@@ -1,5 +1,4 @@
 import { parseSnapshot } from './inventory.snapshot';
-import { seedDemoInventory } from './inventory.seed';
 import type { InventorySnapshot } from './inventory.types';
 
 // Retain the original key so v1 records remain discoverable during schema migration.
@@ -16,7 +15,7 @@ export function createInventoryStorage(driver: StorageDriver) {
   const storage = {
     async load(): Promise<InventorySnapshot> {
       const json = await driver.getItem(INVENTORY_STORAGE_KEY);
-      return json === null ? { version: 3, stocks: [], locations: [], quantityHistory: [] } : parseSnapshot(json);
+      return json === null ? { version: 5, stocks: [], locations: [], quantityHistory: [] } : parseSnapshot(json);
     },
     async save(snapshot: InventorySnapshot): Promise<void> {
       // Round-trip validation drops derived fields and rejects invalid snapshots before writing.
@@ -28,11 +27,8 @@ export function createInventoryStorage(driver: StorageDriver) {
       // Share concurrent initialization and reset the lock after success or failure.
       initialization = (async () => {
         try {
-          const current = await storage.load();
-          const seeded = seedDemoInventory(current);
-          // Records and completion flag are committed in the same storage write.
-          if (seeded !== current) await storage.save(seeded);
-          return seeded;
+          // Opening the app only reads existing data; new devices stay empty.
+          return await storage.load();
         } finally {
           initialization = null;
         }

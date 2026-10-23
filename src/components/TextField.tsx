@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
-import { colors, radii } from '@/theme/tokens';
+import { colors, radii } from '@/theme/inventoryTheme';
 import { FieldLabel } from './FieldLabel';
 
 interface TextFieldProps extends TextInputProps {

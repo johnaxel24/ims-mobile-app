@@ -1,5 +1,7 @@
 # React Native architecture review
 
+This review describes the earlier implementation. The current product/history update supersedes the delivery-per-row design: each product now has one available balance, receiving appends immutable receipt costs in Stock History, and explanatory field hints have been removed. V5 migrates earlier delivery records into product summaries while retaining imported receipts and source movements. No additional subagent review or execution-based verification has been performed for this update; use the current README for behavior and pending checks.
+
 Read-only senior-engineer subagent review, 23 October 2026. No application, tests, lint, typecheck, installation commands, or Git mutations were executed by the reviewer or main agent.
 
 ## Assessment

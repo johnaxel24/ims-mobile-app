@@ -1,6 +1,6 @@
 import { StyleSheet, Text } from 'react-native';
 
-import { colors } from '@/theme/tokens';
+import { colors } from '@/theme/inventoryTheme';
 
 export function FieldLabel({ label, required = false }: { label: string; required?: boolean }) {
   return (

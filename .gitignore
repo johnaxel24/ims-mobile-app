@@ -37,6 +37,10 @@ yarn-error.*
 *.tsbuildinfo
 .test-build/
 
+# local tests and editor settings
+/tests/
+.vscode/
+
 example
 
 # generated native folders

@@ -1,112 +1,111 @@
 # Stockroom
 
-A small, offline inventory application for one store owner on one phone. Built with Expo SDK 58, React Native, TypeScript, Expo Router, React Context, and AsyncStorage.
+An offline inventory app for one store owner on one phone, using Expo SDK 58, React Native, TypeScript, Expo Router, React Context, and AsyncStorage.
 
-## Setup
+## Product behavior
 
-Use Node.js 22.13 or later, pnpm (the starter already uses a pnpm lockfile), and an Expo Go version compatible with SDK 58. Run all commands below from `ims-mobile-app/`, the directory containing `package.json`.
+Home shows **one row per product and its total available quantity**. Add Inventory Item creates a new product with its initial receipt. Open an existing product and choose **Receive stock** for later deliveries; receiving adds to the available total and saves that delivery's quantity, date, optional unit cost, and notes in **Stock History**.
 
-The agent did not install dependencies or execute the app, tests, lint, or typecheck. These commands must be run by the user under the workspace's `AGENTS.md` restrictions.
+For example: receive 20 units at 15.00, sell 8, then receive 10 at 16.00. Home still shows one product, with **22 units available**. Its history keeps the first delivery's acquisition cost at **300.00** and the second at **160.00**. Further sales, damage, count corrections, and product edits do not rewrite those receipt costs. There is no standalone acquisition-cost card based on the current quantity.
 
-```sh
-pnpm exec expo install @react-native-async-storage/async-storage
-pnpm exec expo install 'eslint@^9' eslint-config-expo --dev
-```
+New inventory items are unique by **name and location**, ignoring capitalization and surrounding spaces. The same name may be stored at different locations. A different measurement cannot bypass the duplicate check at the same location. Duplicate creation or name/location changes show a message naming the item and location and suggesting Receive stock on the existing record. Existing unit variants created under the old rule remain readable and can receive stock or unrelated metadata edits; they are not silently merged. Each receipt retains its original location.
 
-The first command adds the SDK-compatible persistent storage dependency. The second adds the lint tools required by `eslint.config.js`. Both update `package.json`, `pnpm-lock.yaml`, and `node_modules`; do not replace the existing lockfile with another package manager's lockfile.
+- Create a product with name, initial quantity, saved location, alert threshold, received date, optional measurement, optional unit cost, and notes.
+- Receive stock through a dedicated form with positive quantity, date, optional cost, and optional delivery notes. Initial stock may be zero; later deliveries must be positive.
+- Edit product name, available quantity, location, measurement, threshold, and notes. Quantity changes require Sold, Damaged, Count correction, or Other; receiving uses its own action and automatically records Restocked.
+- Sold/Damaged reduce stock; count corrections and Other may move either way. Corrections do not create purchase receipts.
+- Stock History shows the latest three receipts/adjustments and View All for longer history. Each receipt shows its date, quantity, unit cost, and acquisition cost. Explanations expand on demand.
+- Product details show total quantity, Stock History, a collapsed Movement Summary, metadata, notes, Receive stock, and one Edit stock details button. Receive stock sits directly above Edit stock details.
+- Delete inventory item appears below Edit stock details. Its confirmation names the item and offers Cancel/Delete, explaining that delivery and movement history will also be permanently deleted. The item and history are removed in one save; reusable locations and unrelated items remain. Failed saves keep the item intact and display an error. Successful deletion returns to the inventory list.
+- Expand Movement Summary to switch between the last 7 and 30 days. It shows signed units restocked, sold, damaged, corrected, and changed for other reasons, plus net movement. Periods include today and the previous 6/29 local calendar days, up to the summary's current time, and group movements by their saved timestamps rather than backdated receipt dates. The initial opening balance and imported receipt records are excluded; known imported adjustments still count by their recorded reasons. A visible note identifies incomplete imported history. An empty period shows a clear message.
+- Low-stock badges and filters use the product's total quantity, including equality and zero. Search, low-stock filtering, and sorting combine.
+- Sort by creation date, most-recently-received date, total quantity, or location. Newest creation comes first by default; receiving and editing do not change creation order.
+- Locations are saved independently through an inline dropdown, with case-insensitive deduplication and selection.
+- Forms use concise labels, red required asterisks, accessible required labels, inline errors, and a visible bottom summary. Explanatory field descriptions have been removed. Failed saves preserve inputs and previous shared state.
+- Native modals use safe-area providers and keyboard avoidance. Shared tokens provide spacing, rounded corners, and subtle shadows.
+- Fresh installations remain empty. No dummy-data generator is included. Existing saved samples remain intact as existing user data.
 
-Then verify and start:
+No login, backend, synchronization, checkout, accounting ledger, barcode scanning, OS notifications, or analytics dashboard is included.
 
-```sh
-pnpm run typecheck
-pnpm run lint
-pnpm test
-pnpm start
-```
+## Data and migration
 
-`typecheck` checks application TypeScript without emitting application files. `lint` checks source and configuration; Expo/ESLint may create local cache files. `test` compiles the framework-independent logic into the ignored `.test-build/` directory and runs Node's built-in test runner, without additional test-framework dependencies. `start` runs Metro and may generate ignored `.expo/` and `expo-env.d.ts` files; scan its QR code using Expo Go on a device on the same network.
+Products have immutable IDs and creation timestamps, a current total quantity, current metadata, an automatically updated timestamp, and the most recent received calendar date. Dates use local `YYYY-MM-DD`; timestamps use canonical UTC ISO values displayed in local time. Backdated receipts retain their dates without moving the product's latest received date backwards. Movement summaries are derived from history without changing or persisting it. Their internal integer sums avoid precision loss; totals outside the safe numeric display range show Too large to display, while an exactly representable net remains available. Expanded summaries refresh after saved history changes and every minute; opening the section or changing its period also refreshes the time window.
 
-If dependency compatibility needs diagnosis, run `npx expo-doctor` from this same directory. For Expo Go SDK compatibility, see the [Expo SDK 58 documentation](https://docs.expo.dev/versions/v58.0.0/).
+Each delivery has a fixed received quantity and movement, with optional unit cost and total acquisition cost. Add and Receive stock suggest quantity × unit cost; enter a total to override that suggestion, including fees or an invoice amount when unit cost is unknown. Blank total uses the suggestion, while both costs blank remain unavailable. Save the final total in integer minor units; explicit zero remains zero. Amounts accept at most two decimal places and must fit safe integers. Use one currency throughout.
 
-## Features
+Choose **Edit delivery costs** in Stock History (including View All) to correct unit cost, total acquisition cost, or delivery notes. **Use calculated total** clears the override. Edits preserve received quantities, dates, location, movement balances, timestamps, and append order; they update the product's last-updated time and show a separate Costs updated timestamp. Failed saves retain entered values and prior saved data. The v5 receipt format adds optional `totalAcquisitionCostMinor` and `costUpdatedAt` fields; older receipts without a saved total retain their calculated display until edited, with no startup write.
 
-- Add stock with a name, quantity, saved location, low-stock threshold, date received, and optional cost per unit, measurement per unit, and notes.
-- Select a location from a dropdown or add one inline. Location names are saved independently, reused, and deduplicated without regard to capitalization.
-- See a live, read-only total acquisition cost when cost is provided: current quantity × cost per unit. Missing cost remains unknown rather than becoming zero.
-- Keep the acquisition-cost preview visible when cost is cleared in add or edit forms, showing Not Provided. Invalid supplied values show a correction hint rather than a misleading calculated amount.
-- View all details, including the immutable `created_at` timestamp and automatically maintained last-updated timestamp.
-- Edit name, quantity, saved location, optional cost/measurement, alert threshold, most recently received date, and notes through Edit Stock Details. Creation timestamp and ID stay fixed; last updated is automatic, and acquisition cost remains calculated.
-- Stock details sections appear in this order: quantity, history, stock details, notes, total acquisition cost, then one Edit Stock Details button. The received date is labeled Most recently received date.
-- Preview each quantity change before saving, choose a required reason (Restocked, Sold, Damaged, Count correction, or Other), and optionally attach an explanation separate from stock notes.
-- View the latest three quantity changes on stock details, expand explanations, and open the full history when there are more than three entries. History shows the signed change, before/after quantity, reason, and local timestamp.
-- See Low Stock indicators at or below the alert threshold and filter to those records.
-- Search names with case-insensitive partial matches; combine search with filtering and sorting.
-- Sort by date added, inventory date, quantity, or location in either direction; default to most recently created.
-- See compact inventory rows immediately below search and All/Low Stock filters. Search and filters remain accessible while the list scrolls; sorting options open in a sheet. Costs and received dates remain on stock details.
-- Cards have consistent gaps, rounded corners, and subtle shared shadows. Native modals have local safe-area providers to keep headers below the status bar.
-- Return home after adding stock, clearing search/filters and restoring newest-first ordering so the saved item is visible.
-- Keep records offline after restarting, with loading, empty, missing-record, validation, and retryable storage error states.
-- Required fields have red asterisks and required-status accessibility labels. Failed add/edit submissions show a summary beside the save button naming all fields needing attention, including a missing quantity-change reason, and bring that feedback into view. Inline validation remains available.
+Snapshot version **5** uses the original `@stockroom/inventory/v1` key. Startup validates and migrates in memory without writing; the next successful mutation persists v5. Existing v1–v4 records with matching names, locations, and measurements merge into one product, summing remaining quantities. Different locations and incompatible measurements remain separate. Migration preserves the first product ID, earliest creation time, latest product metadata, latest received date, and maximum alert threshold. Original record notes remain in imported receipts, including notes not selected as current product metadata. Original saved locations remain available.
 
-On the first opening after the seed update, the app adds eight sample stock records across five locations, identified in their notes. These include healthy, low, and zero stock and an example with optional cost/measurement omitted. Existing records are preserved, and sample location names reuse existing case-insensitive matches. There is no login, server, deletion, checkout, accounting ledger, or system notification permission.
+Known v4 receipt quantities and prices become imported receipt history. Original received quantities unavailable in v1–v3, or unconfirmed in v4, stay unknown; acquisition cost stays unavailable. The app never guesses an original purchase quantity. Original movement IDs, counts, reasons, explanations, timestamps, and relative save order survive migration. Original record IDs become source references. Imported adjustments display **Original delivery balance**, because those before/after counts describe an older delivery record rather than a product-wide historical total. Imported receipts precede the preserved adjustment sequence; no missing events or historical aggregate balances are fabricated.
+
+Imported receipts retain frozen remaining-at-import balances to validate source histories and the opening combined product balance. New product history must be consecutive and end at the current available quantity. Every mutation saves the stock and history together, and the provider publishes new state only after storage succeeds. No-op and metadata-only edits add no movements. History displays in reverse save order, including timestamp ties or clock changes. Legacy `demoSeeded` metadata remains readable but never generates records.
+
+Invalid records, money, references, dates, source/history chains, duplicate IDs/products, unsupported versions, or unreadable JSON produce a retryable error without silently replacing data. Storage operations use an injected driver for framework-independent tests; only the native adapter imports AsyncStorage.
 
 ## Structure
 
+Expo Router entry files live in `src/app` and only export the corresponding screen or navigator. Screen implementations have descriptive filenames under `src/features/inventory/screens`; stack/provider setup lives in `src/navigation/AppNavigator.tsx`.
+
 ```text
 src/
-  app/                         Expo Router list, add, and details screens
-  components/                  Shared buttons, fields, feedback, and empty states
+  app/
+    _layout.tsx                 Entry for AppNavigator and initial-route settings
+    index.tsx                   Entry for InventoryListScreen (/)
+    inventory/
+      add-item.tsx              Entry for AddInventoryItemScreen (/inventory/add-item)
+      [itemId].tsx              Entry for InventoryItemDetailsScreen (/inventory/:itemId)
+  navigation/
+    AppNavigator.tsx            Root stack, provider, status bar, save/back protection
   features/inventory/
-    components/                Stock cards, form, controlled quantity adjustment, edit modal, loading gate
-    InventoryProvider.tsx      Shared state and serialized save operations
-    inventory.types.ts         Explicit data and form interfaces
-    inventory.logic.ts         Validation, money, dates, editing, and list selectors
-    inventory.form.ts          Submission validation with complete field/reason feedback
-    inventory.snapshot.ts      Untrusted JSON validation and v1/v2/v3 migration
-    inventory.persistence.ts   Testable storage adapter with injected driver
-    inventory.storage.ts       AsyncStorage integration
-  theme/tokens.ts              Shared colors, spacing, and radii
-tests/                         Node tests for inventory logic and persistence
+    screens/
+      InventoryListScreen.tsx   Inventory list, search, filtering, sorting
+      AddInventoryItemScreen.tsx Creation screen and return-home behavior
+      InventoryItemDetailsScreen.tsx Details, receiving, editing, deletion, history
+    components/                 Inventory-specific UI
+  components/                   Reusable controls
+  theme/inventoryTheme.ts       Colors, spacing, radii, shadows, content width
 ```
 
-## Data behavior
+`index.tsx`, `_layout.tsx`, and bracketed parameters follow Expo Router's filename conventions; application implementation stays in descriptively named modules. The previous `/stocks/new` and `/stocks/[id]` routes have been replaced, and all in-app navigation uses the new inventory routes.
 
-Each stock has a generated immutable ID and creation timestamp (`created_at`). Quantity and threshold use nonnegative whole units, including zero. Optional cost is stored as integer minor units (15.50 becomes 1550) or `null` when omitted; explicit zero remains a valid known cost. Optional measurement is trimmed descriptive text such as "500 g" or "1 L", stored as `measurementPerUnit` or `null`; it does not change the quantity or cost calculation. Use one currency consistently. Calculated totals must remain safe integers and are never stored separately; they are `null` when cost is unknown.
+Inventory models, pure actions/selectors, form validation, snapshot validation/migration, provider, and storage adapters also live in `src/features/inventory`. `StockForm` handles product creation/editing, `ReceiveStockForm` handles delivery inputs, and the edit modal supplies navigation/layout for either form. `QuantityAdjustment` renders controlled quantity/reason inputs. Movement aggregation lives in the pure `inventory.movements.ts` module; `StockMovementSummary` owns only expansion, period selection, and refresh state. Existing tests live in `tests/`; no tests were changed for the screen reorganization.
 
-Inventory date is the most recently received date, a local calendar date entered as `YYYY-MM-DD`, defaulting to today. It is editable after creation and is not changed automatically when quantity changes. Last updated is an automatically generated UTC timestamp displayed in local time. Saving an unchanged edit leaves the timestamp alone.
+## Verification
 
-After creation, creation time and ID are protected by the edit whitelist even if an untyped caller submits replacements. Name, saved location, quantity, threshold, notes, cost, measurement, and received date can be corrected; blank optional cost/measurement clear them to `null`. Editing location requires a saved name and uses its canonical casing. Metadata-only changes, including received-date edits, update last updated without creating quantity history. The persisted v3 record shape is unchanged, and no new dependencies are required.
+No new dependencies are required. Use Node.js 22.13 or later, pnpm, and Expo Go compatible with SDK 58. From `ims-mobile-app/` (the directory containing `package.json`), run:
 
-The snapshot is stored at the original key `@stockroom/inventory/v1`, now as `{ version: 3, stocks: [...], locations: [...], quantityHistory: [...] }`, retaining the optional one-time `demoSeeded` flag. Existing v1/v2 snapshots migrate in memory without a write, starting with empty quantity history. For v1, locations are extracted from records, measurement defaults to `null`, and `created_at` falls back to `lastUpdatedAt`. The next successful mutation persists v3 at the same key. Previously seeded data does not seed again during migration.
+```sh
+pnpm run typecheck
+pnpm test
+pnpm run lint
+pnpm start
+```
 
-Quantity updates append an immutable entry containing ID, stock ID, previous/new quantities, reason, optional explanation (empty string when absent), and UTC timestamp. The quantity and entry save together in one snapshot write; state updates only after that write succeeds. Notes-only edits, no-op saves, and canceled or failed saves create no history. Validation rejects orphaned/duplicate entries, invalid counts/reasons/timestamps, broken quantity chains, or a final history quantity that disagrees with the record. Entries display in reverse save order, including timestamp ties or device clock changes. No historical movements are inferred from existing inventory or demo data.
+Typecheck validates TypeScript without emitting application files. Tests compile framework-independent modules into ignored `.test-build/` and use Node's built-in test runner. Lint may create local caches. Start launches Metro and may generate ignored `.expo/` and `expo-env.d.ts` files; scan the QR code in Expo Go. Agents cannot execute these commands under AGENTS.md. No agent has claimed these checks pass.
 
-Loading validates the version, every record, and ID uniqueness. Invalid or unreadable data blocks edits and exposes a retry instead of silently replacing inventory with an empty array. Stock and location saves share a lock, and shared UI state changes only after persistence succeeds; failed saves retain form entries for another attempt. Stock creation requires a saved location; adding a duplicate name selects the existing canonical location. `created_at` never changes on edits. Equal creation timestamps use insertion order, with later-added records first.
+After changing route filenames, start or restart Expo using `pnpm start` so it refreshes generated route types in `.expo/types/router.d.ts` before running typecheck. Do not edit that generated file manually. The screen reorganization has been inspected through read-only source checks; runtime navigation and typecheck/lint remain pending the user's execution.
 
-The dropdown compares location names case-insensitively, including migrated records whose stored casing differs from the deduplicated saved name. Snapshot parsing lives in `inventory.snapshot.ts`, with the same storage key, v3 shape, and migration behavior. `buildEditedRecord` constructs records only; provider edits use `editStockInSnapshot` to enforce reason/history rules. The form owns submitted input and save coordination; `QuantityAdjustment` renders controlled values and owns only its reason-picker expansion. Submission validation in `inventory.form.ts` is framework-independent and covered by authored regression tests; execution is pending the user's checks.
+The product/history update has authored regression tests covering atomic initial receipts, receiving totals, stable delivery costs after sales/damage/corrections, duplicate products, unit distinctions, no-op/metadata changes, history ordering, optional values, money/quantity overflow, input feedback, low-stock boundaries, combined selectors, migration v1–v4, malformed data, startup without samples/writes, persistence, and failed writes. Tests, typecheck, lint, provider/component execution, and device checks remain pending the user's execution. Earlier subagent reviews concerned the previous design; this change has not received an additional subagent review.
 
-App initialization adds the demo records only when `demoSeeded` is absent or false. The records and `demoSeeded: true` are persisted together in the same snapshot before inventory becomes available. Concurrent initialization calls share one operation; failures preserve the prior snapshot and allow retry. Future openings do not write or regenerate samples, and edits to samples remain intact. Stable sample IDs also prevent duplicates if an old snapshot contains those records without the flag. Clearing the app's stored data resets the flag and permits the one-time seed again. Raw storage reads remain read-only; only the app's explicit initialization path seeds data.
+Movement-summary regression tests additionally cover per-product signed unit totals, opening/imported receipt exclusions, known legacy movements, local midnight boundaries, 7/30-day differences, future-save exclusion, backdated receipts, empty periods, leap/year boundaries, and exact cancellation when category totals overflow the safe display range. These tests have been authored but not executed by the agent.
 
-## Device acceptance checks
+The later delete-item update was inspected through read-only source checks. No tests were added or modified for deletion, following the user's rule that test work requires an explicit request. Runtime verification remains pending the user's execution.
 
-1. Open Add Stock, expand Location, and add "Shelf B". Add "Jasmine rice" with quantity 20, optional measurement "1 kg", cost per unit 15.00, threshold 5, and an earlier received date. Confirm it returns home with the new record first; open details and confirm the total is 300.00 and the record is in stock.
-2. Open details and select Edit Stock Details. Enter 5, verify the preview shows 20 → 5 and −15, and try saving without a reason. Choose Sold, add an optional explanation and a stock note, and save. Confirm the total is 75.00, the Low Stock badge appears, and the history shows one entry with an expandable explanation.
-3. Edit quantity to 0, then 12, selecting a reason each time. Confirm totals of 0.00 and 180.00; zero remains low stock, and 12 clears the badge. Make a fourth change and verify details shows only the latest three entries with View All opening the full list newest first. Save only notes, save an unchanged form, and cancel an edit; none should add a history entry.
-4. Create records with different received dates, locations, and quantities, including blank cost and measurement. Verify newest-first creation ordering regardless of received dates, missing cost shown as unknown, explicit zero shown as 0.00, and all other sorts in both directions. Combine searching and the Low Stock filter, then add another record and verify the home list resets to show it first.
-5. Check red asterisks on name, location, quantity, alert threshold, received date, new-location name, and the conditional quantity-change reason; optional fields and search must have no required marker. Try blank required fields, negative/fractional counts, an invalid optional cost, and an impossible date. Save from the bottom with the upper fields off-screen and confirm the bottom summary names every invalid field and is brought into view. Change quantity without selecting a reason (also try another invalid field at the same time) and confirm the bottom summary includes the missing reason. Verify inline errors, preserved inputs, and required labels in VoiceOver/TalkBack.
-6. Close and reopen the app. Confirm all records, notes, costs, dates, and quantity history remain. With existing v1/v2 data, confirm records and the sample flag survive migration and history starts empty.
-7. Check a smaller phone, a large text setting, VoiceOver/TalkBack, and keyboard visibility for the add screen and edit modal. Confirm stock rows are visible immediately, search/filters remain accessible while scrolling, the sort sheet scrolls and closes correctly, and repeated taps cannot create overlapping saves.
-8. Where storage failures can be simulated, confirm loading offers retry without writing data and a failed save leaves the form, previous stock, and history intact. Retrying should create exactly one entry. Storage failure and invalid-snapshot cases are also covered by the authored automated tests.
-9. Reuse a saved location and try adding its name with different capitalization. Confirm no duplicate location appears. Add a standalone location, leave without saving a stock, and restart to confirm the location remains available.
-10. On first opening after the seed update, confirm eight sample records are added alongside any existing records. Edit a sample's quantity and notes, close and reopen the app twice, and confirm the count stays unchanged and the edit remains.
-11. Open Edit Stock Details on a notched iPhone and an Android device. Confirm the header stays below the time/status bar, including after rotation, and the keyboard does not hide save/cancel controls. Check the full-history modal and sort sheet as well.
-12. Edit name, location (including an inline new location), measurement, cost, threshold, received date, and notes without changing quantity. Confirm the changes persist after reopening, creation time stays unchanged, last updated advances, totals/alerts recalculate, and history count stays unchanged. Try an invalid received date and confirm saving is blocked. Clear optional cost/measurement and confirm they remain unknown. Repeat with a quantity change and confirm exactly one history entry. Check the requested section order, single bottom edit button, spacing, and shadows.
-13. In an edit form with a supplied cost, clear it and confirm the acquisition-cost preview stays visible as Not Provided. Enter an invalid cost and confirm it shows a correction hint; enter zero and confirm a known 0.00 total. With mixed-case legacy location names, confirm the saved option is selected. After the refactor, recheck combined validation errors (including missing reason), inline location creation, failed-save retries, keyboard/feedback scrolling, and post-create navigation/filter reset.
+## Device checks
 
-## Verification status
-
-The initial implementation received a read-only subagent review. Subsequent changes, including the compact inventory UI, quantity history, and v3 migration, have been inspected through read-only source checks and have authored regression tests. Execution-based verification is pending the user's commands and device checks; source inspection does not establish that lint, typecheck, tests, or a device build pass.
-
-The expanded-editing and modal-layout update received a read-only senior React Native/architecture review. See [CODE_REVIEW.md](CODE_REVIEW.md) for its assessment, addressed findings, and future improvements. Additional tests cover editable-field validation, creation-time/ID protection, optional-value clearing, saved-location rules, recalculation, and combined detail/quantity saves. Received-date regression tests cover date-only changes, invalid dates, persistence, and sorting without changing creation order; they have not been executed by the agent.
-
-The review follow-up fixes legacy location selection and the missing edit-cost preview, improves JSX readability, extracts quantity adjustment and snapshot parsing, and clarifies the record-builder API. Authored regression tests now cover mixed-case legacy selection and combined field/reason submission feedback. Existing migration, failed-save, quantity-history, and received-date tests now exercise the extracted modules. These are pure logic/storage tests, not component execution tests; actual provider, navigation, keyboard, and accessibility verification remains pending the user's commands and device checks.
+1. Add Rice (1 kg), quantity 20, cost 15.00, threshold 5. Confirm one Home row with 20 available and an initial receipt with acquisition cost 300.00.
+2. Receive 10 at 16.00 on a different date. Confirm one row with 30 available, unchanged creation order, and two independent receipt costs of 300.00 and 160.00.
+3. Sell 8 with a reason. Confirm 22 available, one adjustment, and unchanged receipt costs. Sell down to zero; both purchase costs remain in history. Count corrections may increase quantity without inventing a delivery.
+4. Attempt to add or rename another product to ` rice ` with measurement `1 KG`. Confirm duplicate feedback. Add Rice with 500 g and confirm it remains distinct.
+5. Open v4 test data with two same-product delivery records, including quantity history. Confirm one product with the sum of remaining quantities, both receipt costs/dates/locations/notes, and original delivery balance labels on imported movements. Receive more and restart to confirm v5 persists without another merge or extra receipts.
+6. Open v1–v3 data or unconfirmed v4 data. Confirm stock is preserved, receipts stay unknown where necessary, and no historical acquisition amounts are guessed.
+7. Verify invalid/blank required values, zero/negative/fractional delivery quantities, invalid dates/costs, and missing adjustment reasons. Feedback must appear inline and at the bottom, including when upper fields are off-screen. Required asterisks/accessibility labels remain; field descriptions are absent.
+8. Cancel receiving/editing and verify nothing changes. In a controlled storage-failure setup, confirm prior stock/history remain, inputs stay populated, and retry adds exactly one receipt or adjustment.
+9. Receive a backdated delivery. Confirm its date in history and unchanged most-recently-received date when an existing receipt is newer. Check local date display after restart.
+10. Verify low-stock equality/zero, counts, search, all sort directions, and their combination. After adding a product, Home should reset filters/sort/scroll to show it first.
+11. Verify latest-three and View All history, optional explanations, notched-device modal headers, small screens, large text, screen readers, and Save/Cancel access with the keyboard open. Repeated save taps must not duplicate receipts.
+12. Reopen a fresh installation repeatedly: no samples should appear. Existing installations retain saved records and locations. Add a location without saving a product; it must survive restart and case-insensitive duplicates must reuse it.
+13. Confirm Receive stock appears directly above Edit stock details, with one of each. Movement Summary should appear below Stock History and start collapsed. Expand/collapse it and switch between 7 and 30 days; check touch targets, small-screen wrapping, and screen-reader expanded/selected states.
+14. With an opening balance excluded, record +20 restocked, −8 sold, −2 damaged, +1 correction, and −1 Other within the selected period. Confirm all five rows show those signed unit amounts and net movement is +10. Initial-stock-only and empty periods should show no recorded movements. Known imported adjustments should count once; imported receipts should not be counted as fresh restocks.
+15. Leave the summary expanded, save a delivery or adjustment, and confirm it refreshes. Restart, reopen the summary, and check the same totals. For a backdated receipt saved today, confirm it counts by today's recorded timestamp. Test entries on the first local midnight of the period, outside the period, and beyond the current clock time in a controlled test setup.

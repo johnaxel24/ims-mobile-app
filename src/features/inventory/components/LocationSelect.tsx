@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { FieldLabel } from '@/components/FieldLabel';
 import { Notice } from '@/components/Notice';
 import { TextField } from '@/components/TextField';
-import { colors, radii } from '@/theme/tokens';
+import { colors, radii } from '@/theme/inventoryTheme';
 import { useInventory } from '../InventoryProvider';
 import { isSameLocation } from '../inventory.logic';
 
@@ -17,16 +17,45 @@ interface LocationSelectProps {
 }
 
 export function LocationSelect({ value, onChange, error, disabled }: LocationSelectProps) {
-  const { locations, addLocation } = useInventory();
+  const { locations, addLocation, deleteLocation, isSaving } = useInventory();
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [locationError, setLocationError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingLocation, setDeletingLocation] = useState<string | null>(null);
   const busy = useRef(false);
+  const confirming = useRef(false);
+  const unavailable = Boolean(disabled || isSaving || saving || deletingLocation !== null);
+
+  async function removeLocation(location: string) {
+    if (busy.current || disabled || isSaving) return;
+    busy.current = true;
+    setDeletingLocation(location);
+    setLocationError(null);
+    try {
+      await deleteLocation(location);
+      if (isSameLocation(value, location)) onChange('');
+    } catch (error) {
+      setLocationError(error instanceof Error ? error.message : 'Location could not be deleted. Please try again.');
+    } finally {
+      busy.current = false;
+      setDeletingLocation(null);
+    }
+  }
+
+  function confirmDeletion(location: string) {
+    if (unavailable || busy.current || confirming.current) return;
+    Keyboard.dismiss();
+    confirming.current = true;
+    Alert.alert('Delete location?', `Remove “${location}” from your saved locations? Existing delivery history will be kept.`, [
+      { text: 'Cancel', style: 'cancel', onPress: () => { confirming.current = false; } },
+      { text: 'Delete', style: 'destructive', onPress: () => { confirming.current = false; void removeLocation(location); } },
+    ], { cancelable: true, onDismiss: () => { confirming.current = false; } });
+  }
 
   async function saveLocation() {
-    if (busy.current || disabled) return;
+    if (busy.current || unavailable) return;
     if (!name.trim()) { setLocationError('Enter a location name.'); return; }
     busy.current = true;
     setSaving(true);
@@ -52,8 +81,8 @@ export function LocationSelect({ value, onChange, error, disabled }: LocationSel
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Location, required: ${value || 'Select a location'}`}
-        accessibilityState={{ expanded, disabled: Boolean(disabled) }}
-        disabled={disabled}
+        accessibilityState={{ expanded, disabled: unavailable }}
+        disabled={unavailable}
         onPress={() => { Keyboard.dismiss(); setExpanded((current) => !current); }}
         style={[styles.control, error && styles.invalid]}>
         <Text style={[styles.value, !value && styles.placeholder]}>{value || 'Select a location'}</Text>
@@ -70,21 +99,27 @@ export function LocationSelect({ value, onChange, error, disabled }: LocationSel
               {locations.map((location) => {
                 const selected = isSameLocation(value, location);
                 return (
+                  <View key={location} style={[styles.optionRow, selected && styles.selected]}>
                   <Pressable
-                    key={location}
                     accessibilityRole="button"
-                    accessibilityState={{ selected, disabled: Boolean(disabled) }}
-                    disabled={disabled}
+                    accessibilityState={{ selected, disabled: unavailable }}
+                    disabled={unavailable}
                     onPress={() => {
                       onChange(location);
                       setExpanded(false);
                       setAdding(false);
                       setLocationError(null);
                     }}
-                    style={[styles.option, selected && styles.selected]}>
+                    style={styles.option}>
                     <Text style={styles.optionText}>{location}</Text>
                     {selected && <Text style={styles.check}>✓</Text>}
                   </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Delete location ${location}`}
+                    accessibilityState={{ disabled: unavailable }} disabled={unavailable}
+                    onPress={() => confirmDeletion(location)} style={styles.deleteButton}>
+                    <Text style={styles.deleteText}>{deletingLocation === location ? 'Deleting…' : 'Delete'}</Text>
+                  </Pressable>
+                  </View>
                 );
               })}
             </ScrollView>
@@ -95,7 +130,7 @@ export function LocationSelect({ value, onChange, error, disabled }: LocationSel
             <Button
               title="+ Add new location"
               variant="ghost"
-              disabled={disabled}
+              disabled={unavailable}
               onPress={() => {
                 setAdding(true);
                 setLocationError(null);
@@ -112,21 +147,20 @@ export function LocationSelect({ value, onChange, error, disabled }: LocationSel
                   setLocationError(null);
                 }}
                 placeholder="e.g. Shelf A"
-                editable={!disabled && !saving}
+                editable={!unavailable}
                 autoCapitalize="sentences"
                 autoFocus
               />
-              {locationError && <Notice error message={locationError} />}
               <Button
                 title="Save location"
                 loading={saving}
-                disabled={disabled && !saving}
+                disabled={unavailable && !saving}
                 onPress={() => { void saveLocation(); }}
               />
               <Button
                 title="Cancel"
                 variant="ghost"
-                disabled={disabled || saving}
+                disabled={unavailable}
                 onPress={() => {
                   setAdding(false);
                   setLocationError(null);
@@ -134,9 +168,9 @@ export function LocationSelect({ value, onChange, error, disabled }: LocationSel
               />
             </View>
           )}
+          {locationError && <View style={styles.feedback}><Notice error message={locationError} /></View>}
         </View>
       )}
-      <Text style={styles.hint}>Choose a saved location or add one for future stock records.</Text>
     </View>
   );
 }
@@ -150,12 +184,15 @@ const styles = StyleSheet.create({
   invalid: { borderColor: colors.danger },
   dropdown: { borderWidth: 1, borderColor: colors.border, borderRadius: radii.sm, backgroundColor: colors.surface, overflow: 'hidden' },
   options: { maxHeight: 220 },
-  option: { minHeight: 48, paddingHorizontal: 14, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  optionRow: { flexDirection: 'row', alignItems: 'center' },
+  option: { flex: 1, minHeight: 48, paddingHorizontal: 14, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deleteButton: { minHeight: 48, minWidth: 64, paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center' },
+  deleteText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+  feedback: { padding: 14 },
   optionText: { flex: 1, color: colors.ink, fontSize: 15, lineHeight: 22 },
   selected: { backgroundColor: colors.primarySoft },
   check: { color: colors.primary, fontSize: 16 },
   newLocation: { padding: 14, gap: 10, borderTopWidth: 1, borderTopColor: colors.border },
   empty: { padding: 14, color: colors.muted, fontSize: 13, lineHeight: 20 },
-  hint: { color: colors.muted, fontSize: 12, lineHeight: 18 },
   error: { color: colors.danger, fontSize: 12, lineHeight: 18 },
 });

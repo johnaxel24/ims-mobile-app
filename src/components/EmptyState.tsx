@@ -1,7 +1,7 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
-import { colors } from '@/theme/tokens';
+import { colors } from '@/theme/inventoryTheme';
 
 interface EmptyStateProps {
   title: string;

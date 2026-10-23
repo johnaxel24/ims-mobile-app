@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
@@ -11,25 +11,62 @@ import { EditStockModal } from '@/features/inventory/components/EditStockModal';
 import { InventoryGate } from '@/features/inventory/components/InventoryGate';
 import { QuantityHistory } from '@/features/inventory/components/QuantityHistory';
 import { StockBadge } from '@/features/inventory/components/StockCard';
-import { formatInventoryDate, formatMoney, formatTimestamp, summarizeStock } from '@/features/inventory/inventory.logic';
-import { colors, contentWidth, radii, shadows } from '@/theme/tokens';
+import { StockMovementSummary } from '@/features/inventory/components/StockMovementSummary';
+import { formatInventoryDate, formatTimestamp, summarizeStock } from '@/features/inventory/inventory.logic';
+import { colors, contentWidth, radii, shadows } from '@/theme/inventoryTheme';
 
 function DetailRow({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
   return <View style={[styles.detailRow, last && styles.lastRow]}><Text style={styles.detailLabel}>{label}</Text><Text selectable style={styles.detailValue}>{value}</Text></View>;
 }
 
-export default function StockDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { stocks, quantityHistory, notice, dismissNotice } = useInventory();
-  const [editing, setEditing] = useState(false);
-  const record = stocks.find((stock) => stock.id === id);
+export default function InventoryItemDetailsScreen() {
+  const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const { stocks, quantityHistory, dismissNotice, deleteStock, isSaving } = useInventory();
+  const [editing, setEditing] = useState<'edit' | 'receive' | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const confirming = useRef(false);
+  const deleting = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const record = stocks.find((stock) => stock.id === itemId);
   const stock = record ? summarizeStock(record) : null;
+
+  async function removeItem(stockId: string) {
+    if (deleting.current || isSaving) return;
+    deleting.current = true;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteStock(stockId);
+      router.dismissTo('/');
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Could not delete this inventory item. Please try again.');
+    } finally {
+      deleting.current = false;
+      setIsDeleting(false);
+    }
+  }
+
+  function confirmDeletion() {
+    if (!stock || isSaving || deleting.current || confirming.current) return;
+    confirming.current = true;
+    Alert.alert(
+      'Delete inventory item?',
+      `Are you sure you want to remove “${stock.name}”? Its delivery and movement history will also be permanently deleted.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => { confirming.current = false; } },
+        { text: 'Delete', style: 'destructive', onPress: () => { confirming.current = false; void removeItem(stock.id); } },
+      ],
+      { cancelable: true, onDismiss: () => { confirming.current = false; } },
+    );
+  }
 
   return (
     <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safeArea}>
       <InventoryGate>
         {!stock ? <EmptyState title="Stock not found" description="This record isn't available on this device. Return to your inventory to choose another item." actionLabel="Back to inventory" onAction={() => router.replace('/')} /> : <>
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
             <View style={styles.heading}>
               <View style={styles.headingText}>
                 <Text style={styles.eyebrow}>STOCK DETAILS</Text>
@@ -38,32 +75,32 @@ export default function StockDetailsScreen() {
               </View>
               <StockBadge low={stock.isLowStock} />
             </View>
-            {notice && <Notice message={notice} onDismiss={dismissNotice} />}
             <View style={styles.quantityCard}>
-              <Text style={styles.quantityLabel}>AVAILABLE QUANTITY</Text>
+              <Text style={styles.quantityLabel}>TOTAL AVAILABLE STOCK</Text>
               <View style={styles.quantityRow}><Text style={styles.quantity}>{stock.quantity.toLocaleString()}</Text><Text style={styles.units}>units</Text></View>
               <Text style={styles.threshold}>Low-stock alert at {stock.quantityAlertThreshold.toLocaleString()} units or below</Text>
-              {stock.isLowStock && <View style={styles.alertCard}><Text style={styles.alertTitle}>Time to replenish</Text><Text style={styles.alertText}>Your quantity is at or below the alert threshold. Update the quantity when new stock arrives.</Text></View>}
+              {stock.isLowStock && <View style={styles.alertCard}><Text style={styles.alertTitle}>Low stock</Text></View>}
             </View>
             <QuantityHistory stockId={stock.id} stockName={stock.name} entries={quantityHistory} />
+            <StockMovementSummary key={stock.id} stockId={stock.id} entries={quantityHistory} />
             <View style={styles.detailCard}>
               <Text accessibilityRole="header" style={styles.detailsTitle}>Stock details</Text>
               <DetailRow label="Location" value={stock.location} />
-              <DetailRow label="Cost per unit" value={formatMoney(stock.costPerUnitMinor)} />
               <DetailRow label="Measurement per unit" value={stock.measurementPerUnit ?? 'Not provided'} />
-              <DetailRow label="Most recently received date" value={formatInventoryDate(stock.inventoryDate)} />
+              <DetailRow label="Most recently received" value={formatInventoryDate(stock.inventoryDate)} />
               <DetailRow label="Date added" value={formatTimestamp(stock.created_at)} />
               <DetailRow label="Last updated" value={formatTimestamp(stock.lastUpdatedAt)} last />
             </View>
             <View style={styles.notesCard}><Text style={styles.notesTitle}>Notes</Text><Text selectable style={stock.notes.trim() ? styles.notes : styles.emptyNotes}>{stock.notes.trim() ? stock.notes : 'No notes added yet.'}</Text></View>
-            <View style={styles.costCard}>
-              <Text style={styles.eyebrow}>TOTAL ACQUISITION COST</Text>
-              <Text style={styles.cost}>{stock.totalAcquisitionCostMinor === null ? '—' : formatMoney(stock.totalAcquisitionCostMinor)}</Text>
-              <Text style={styles.formula}>{stock.costPerUnitMinor === null ? 'Cost per unit was not provided.' : `${stock.quantity.toLocaleString()} units × ${formatMoney(stock.costPerUnitMinor)} per unit`}</Text>
-            </View>
-            <Button title="Edit stock details" onPress={() => { dismissNotice(); setEditing(true); }} />
+            <Button title="Receive stock" disabled={isSaving} onPress={() => { dismissNotice(); setEditing('receive'); }} />
+            <Button title="Edit stock details" disabled={isSaving} onPress={() => { dismissNotice(); setEditing('edit'); }} />
+            {deleteError && <View key={deleteError} onLayout={() => requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }))}>
+              <Notice error message={deleteError} />
+            </View>}
+            <Button title={isDeleting ? 'Deleting…' : 'Delete inventory item'} variant="danger" loading={isDeleting} disabled={isSaving}
+              accessibilityLabel={`Delete inventory item ${stock.name}`} onPress={confirmDeletion} />
           </ScrollView>
-          <EditStockModal stock={stock} visible={editing} onClose={() => setEditing(false)} />
+          <EditStockModal stock={stock} visible={editing !== null} mode={editing ?? 'edit'} onClose={() => setEditing(null)} />
         </>}
       </InventoryGate>
     </SafeAreaView>
@@ -86,10 +123,6 @@ const styles = StyleSheet.create({
   threshold: { color: colors.onDarkMuted, fontSize: 12, lineHeight: 19 },
   alertCard: { ...shadows.card, backgroundColor: colors.warningSoft, borderColor: colors.warningBorder, borderWidth: 1, borderRadius: radii.md, padding: 18, gap: 6 },
   alertTitle: { color: colors.warning, fontSize: 14, fontWeight: '700' },
-  alertText: { color: colors.warning, fontSize: 13, lineHeight: 21 },
-  costCard: { ...shadows.card, padding: 22, backgroundColor: colors.primarySoft, borderRadius: radii.md, gap: 8 },
-  cost: { color: colors.ink, fontSize: 32, lineHeight: 42, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  formula: { color: colors.muted, fontSize: 12, lineHeight: 19 },
   detailCard: { ...shadows.card, backgroundColor: colors.surface, paddingHorizontal: 18, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md },
   detailsTitle: { paddingTop: 18, color: colors.ink, fontSize: 14, fontWeight: '700' },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 17, borderBottomWidth: 1, borderBottomColor: colors.border },

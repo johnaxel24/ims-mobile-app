@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { StockSummary } from '../inventory.types';
-import { colors, radii, shadows } from '@/theme/tokens';
+import { colors, radii, shadows } from '@/theme/inventoryTheme';
 
 export function StockBadge({ low }: { low: boolean }) {
   return <View style={[styles.badge, low && styles.lowBadge]}><Text style={[styles.badgeText, low && styles.lowText]}>{low ? 'Low stock' : 'In stock'}</Text></View>;
@@ -10,7 +10,7 @@ export function StockBadge({ low }: { low: boolean }) {
 export function StockCard({ stock, onPress }: { stock: StockSummary; onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button"
-      accessibilityLabel={`${stock.name}, ${stock.quantity} units, ${stock.location}${stock.measurementPerUnit ? `, ${stock.measurementPerUnit} per unit` : ''}${stock.isLowStock ? ', low stock' : ''}. View details.`}
+      accessibilityLabel={`${stock.name}, ${stock.quantity} units available, ${stock.location}${stock.measurementPerUnit ? `, ${stock.measurementPerUnit} per unit` : ''}${stock.isLowStock ? ', low stock' : ''}. View stock details.`}
       onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <View style={styles.information}>
         <Text style={styles.name}>{stock.name}</Text>
@@ -18,7 +18,8 @@ export function StockCard({ stock, onPress }: { stock: StockSummary; onPress: ()
       </View>
       <View style={styles.quantityGroup}>
         <Text style={styles.quantity}>{stock.quantity.toLocaleString()}</Text>
-        {stock.isLowStock ? <StockBadge low /> : <Text style={styles.units}>units</Text>}
+        <Text style={styles.units}>available</Text>
+        {stock.isLowStock && <StockBadge low />}
       </View>
     </Pressable>
   );

@@ -14,9 +14,9 @@
   "include": [
     "src/features/inventory/inventory.types.ts",
     "src/features/inventory/inventory.logic.ts",
+    "src/features/inventory/inventory.movements.ts",
     "src/features/inventory/inventory.snapshot.ts",
     "src/features/inventory/inventory.form.ts",
-    "src/features/inventory/inventory.seed.ts",
     "src/features/inventory/inventory.persistence.ts"
   ]
 }

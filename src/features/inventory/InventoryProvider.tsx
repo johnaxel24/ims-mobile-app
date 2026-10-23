@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { addLocationToSnapshot, createStock, editStockInSnapshot } from './inventory.logic';
+import { addLocationToSnapshot, addStockInSnapshot, deleteLocationFromSnapshot, deleteStockInSnapshot, editDeliveryCostInSnapshot, editStockInSnapshot, receiveStockInSnapshot } from './inventory.logic';
 import { inventoryStorage } from './inventory.storage';
-import type { CreateStockInput, EditStockInput, InventorySnapshot, QuantityHistoryEntry, StockRecord } from './inventory.types';
+import type { CreateStockInput, EditDeliveryCostInput, EditStockInput, InventorySnapshot, QuantityHistoryEntry, ReceiveStockInput, StockRecord } from './inventory.types';
 
 interface InventoryContextValue {
   stocks: readonly StockRecord[];
@@ -16,13 +16,17 @@ interface InventoryContextValue {
   dismissNotice: () => void;
   addStock: (input: CreateStockInput) => Promise<StockRecord>;
   addLocation: (name: string) => Promise<string>;
+  deleteLocation: (name: string) => Promise<void>;
+  editDeliveryCost: (stockId: string, entryId: string, input: EditDeliveryCostInput) => Promise<void>;
   editStock: (id: string, input: EditStockInput) => Promise<StockRecord>;
+  receiveStock: (id: string, input: ReceiveStockInput) => Promise<StockRecord>;
+  deleteStock: (id: string) => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
-  const [snapshot, setSnapshot] = useState<InventorySnapshot>({ version: 3, stocks: [], locations: [], quantityHistory: [] });
+  const [snapshot, setSnapshot] = useState<InventorySnapshot>({ version: 5, stocks: [], locations: [], quantityHistory: [] });
   const { stocks, locations, quantityHistory } = snapshot;
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -88,15 +92,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addStock = useCallback((input: CreateStockInput) => persistChange((current) => {
-    const location = current.locations.find((name) => name.toLocaleLowerCase() === input.location.trim().toLocaleLowerCase());
-    if (!location) throw new Error('Select a saved location or add a new one first.');
     let id: string;
     do {
       idCounter.current += 1;
       id = `stock-${Date.now().toString(36)}-${idCounter.current.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     } while (current.stocks.some((stock) => stock.id === id));
-    const record = createStock({ ...input, location }, id, new Date().toISOString());
-    return { snapshot: { ...current, stocks: [...current.stocks, record] }, result: record };
+    return addStockInSnapshot(current, input, id, new Date().toISOString());
   }, 'Stock added successfully.'), [persistChange]);
 
   const editStock = useCallback((id: string, input: EditStockInput) => persistChange(
@@ -109,9 +110,26 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return { snapshot: next.snapshot, result: next.location };
   }, 'Location saved.'), [persistChange]);
 
+  const deleteLocation = useCallback((name: string) => persistChange((current) => ({
+    snapshot: deleteLocationFromSnapshot(current, name), result: undefined,
+  }), 'Location deleted.'), [persistChange]);
+
+  const editDeliveryCost = useCallback((stockId: string, entryId: string, input: EditDeliveryCostInput) => persistChange((current) => ({
+    snapshot: editDeliveryCostInSnapshot(current, stockId, entryId, input, new Date().toISOString()), result: undefined,
+  }), 'Delivery costs saved.'), [persistChange]);
+
+  const receiveStock = useCallback((id: string, input: ReceiveStockInput) => persistChange(
+    (current) => receiveStockInSnapshot(current, id, input, new Date().toISOString()),
+    'Delivery saved.',
+  ), [persistChange]);
+
   const dismissNotice = useCallback(() => setNotice(null), []);
-  const value = useMemo(() => ({ stocks, locations, quantityHistory, isLoading, isSaving, loadError, notice, retryLoad, dismissNotice, addStock, addLocation, editStock }),
-    [stocks, locations, quantityHistory, isLoading, isSaving, loadError, notice, retryLoad, dismissNotice, addStock, addLocation, editStock]);
+  const deleteStock = useCallback((id: string) => persistChange((current) => ({
+    snapshot: deleteStockInSnapshot(current, id), result: undefined,
+  }), 'Inventory item deleted.'), [persistChange]);
+
+  const value = useMemo(() => ({ stocks, locations, quantityHistory, isLoading, isSaving, loadError, notice, retryLoad, dismissNotice, addStock, addLocation, deleteLocation, editDeliveryCost, editStock, receiveStock, deleteStock }),
+    [stocks, locations, quantityHistory, isLoading, isSaving, loadError, notice, retryLoad, dismissNotice, addStock, addLocation, deleteLocation, editDeliveryCost, editStock, receiveStock, deleteStock]);
 
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 }
