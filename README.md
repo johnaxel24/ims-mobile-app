@@ -22,7 +22,7 @@ pnpm install
 Start Expo:
 
 ```sh
-pnpm exec expo start --go
+pnpm run start
 ```
 
 - **iOS Simulator:** Open Simulator, then press **i** in the Expo terminal.
@@ -30,15 +30,3 @@ pnpm exec expo start --go
 - **Physical device:** Connect the phone and computer to the same network, then open the displayed QR code using Expo Go compatible with SDK 58.
 
 Keep the terminal running while using the development server. Installation creates `node_modules/`; Expo generates local caches and development files.
-
-## Stop or Restart
-
-Press **Control + C** to stop Expo.
-
-To restart with a cleared bundler cache:
-
-```sh
-pnpm exec expo start --clear --go
-```
-
-This clears the bundler cache without deleting saved inventory.
